@@ -614,6 +614,34 @@ describe("database", () => {
       );
     });
 
+    it("should not execute invalid operations rollback operation", async () => {
+      const rollbackEntries = [{
+        operation: "invalidOperation",
+        collection: "users",
+        parameters: { _id: "doc1", name: "John" }
+      }];
+
+      mockAutoRollbackCollection.find.returns({
+        sort: sinon.stub().returnsThis(),
+        project: sinon.stub().returnsThis(),
+        toArray: sinon.stub().resolves(rollbackEntries)
+      });
+
+      const result = await database.connect();
+      result.db.isRollback = true;
+      result.db.migrationFile = "test-migration.js";
+
+      await result.db.autoRollback();
+
+      expect(mockCollection.insertOne.calledOnce).to.equal(false);
+      expect(mockCollection.insertMany.calledOnce).to.equal(false);
+      expect(mockCollection.replaceOne.calledOnce).to.equal(false);
+      expect(mockCollection.deleteOne.calledOnce).to.equal(false);
+      expect(mockCollection.deleteMany.calledOnce).to.equal(false);
+      expect(mockCollection.updateOne.calledOnce).to.equal(false);
+      expect(mockCollection.updateMany.calledOnce).to.equal(false);
+    });
+
     it("should clean up rollback entries after successful rollback", async () => {
       const rollbackEntries = [{
         operation: "insertOne",
