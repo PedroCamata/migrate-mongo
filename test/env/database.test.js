@@ -222,7 +222,7 @@ describe("database", () => {
       expect(bulkWriteOps[0].insertOne).to.exist;
       expect(bulkWriteOps[0].insertOne.collection).to.equal("users");
       expect(bulkWriteOps[0].insertOne.migrationFile).to.equal("test-migration.js");
-      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({ deleteOne: { filter: { name: "John" } } });
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({ deleteOne: { filter: { _id: "123" } } });
     });
 
     it("should store rollback entry when insertMany is called", async () => {
@@ -240,7 +240,7 @@ describe("database", () => {
       
       expect(bulkWriteOps).to.be.an("array");
       expect(bulkWriteOps).to.have.lengthOf(1);
-      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({ deleteMany: { filter: { $or: docs } } });
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({ deleteMany: { filter: { _id: { $in: ["1", "2"] } } } });
       expect(bulkWriteOps[0].insertOne.migrationFile).to.equal("test-migration.js");
     });
 
