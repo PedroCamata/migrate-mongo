@@ -167,7 +167,6 @@ describe("database", () => {
       mockDb = {
         collection: originalCollectionFunc,
         close: sinon.stub(),
-        autoRollbackEnabled: true,
         isRollback: false,
         migrationFile: "test-migration.js",
         autoRollbackCounter: 0
@@ -430,10 +429,14 @@ describe("database", () => {
       const result = await database.connect();
       result.db.isRollback = false;
 
-      await result.db.autoRollback();
-
-      expect(mockAutoRollbackCollection.distinct.called).to.equal(false);
-      expect(mockCollection.bulkWrite.called).to.equal(false);
+      try {
+        await result.db.autoRollback();
+      } catch (err) {
+        expect(err.message).to.equal("Auto-rollback is not enabled for this migration.");
+        return;
+      }
+      
+      expect.fail("Error was not thrown");
     });
 
     it("should fetch rollback entries for the current migration file", async () => {
