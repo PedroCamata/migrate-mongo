@@ -1,12 +1,11 @@
-const { expect } = require("chai");
-const sinon = require("sinon");
-const proxyquire = require("proxyquire");
+vi.mock("mongodb");
+
+import config from "../../lib/env/config.js";
+import mongodb from "mongodb";
+import database from "../../lib/env/database.js";
 
 describe("database - autoRollback feature", () => {
   let configObj;
-  let database;
-  let config;
-  let mongodb;
   let client;
 
   function createConfigObj() {
@@ -40,35 +39,18 @@ describe("database - autoRollback feature", () => {
     };
     
     return {
-      db: sinon.stub().returns(mockDb),
+      db: vi.fn().mockReturnValue(mockDb),
       close: "theCloseFnFromMongoClient"
     };
   }
 
-  function mockConfig() {
-    return {
-      read: sinon.stub().returns(configObj)
-    };
-  }
-
-  function mockMongodb() {
-    return {
-      MongoClient: {
-        connect: sinon.stub().returns(Promise.resolve(client))
-      }
-    };
-  }
-
   beforeEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
     configObj = createConfigObj();
     client = mockClient();
-    config = mockConfig();
-    mongodb = mockMongodb();
-
-    database = proxyquire("../../lib/env/database", {
-      "./config": config,
-      mongodb
-    });
+    vi.spyOn(config, 'read').mockReturnValue(configObj);
+    vi.spyOn(mongodb.MongoClient, "connect").mockResolvedValue(client);
   });
 
   describe("collection method wrapping", () => {
@@ -80,35 +62,35 @@ describe("database - autoRollback feature", () => {
       function createMockCollection(name) {
         return {
           collectionName: name,
-          insertOne: sinon.stub().resolves({ insertedId: "123" }),
-          insertMany: sinon.stub().resolves({ insertedIds: ["1", "2"] }),
-          updateOne: sinon.stub().resolves({ modifiedCount: 1 }),
-          updateMany: sinon.stub().resolves({ modifiedCount: 2 }),
-          replaceOne: sinon.stub().resolves({ modifiedCount: 1 }),
-          deleteOne: sinon.stub().resolves({ deletedCount: 1 }),
-          deleteMany: sinon.stub().resolves({ deletedCount: 2 }),
-          findOne: sinon.stub().resolves({ _id: "doc1", name: "test" }),
-          find: sinon.stub().returns({
-            toArray: sinon.stub().resolves([
+          insertOne: vi.fn().mockResolvedValue({ insertedId: "123" }),
+          insertMany: vi.fn().mockResolvedValue({ insertedIds: ["1", "2"] }),
+          updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+          updateMany: vi.fn().mockResolvedValue({ modifiedCount: 2 }),
+          replaceOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+          deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 }),
+          deleteMany: vi.fn().mockResolvedValue({ deletedCount: 2 }),
+          findOne: vi.fn().mockResolvedValue({ _id: "doc1", name: "test" }),
+          find: vi.fn().mockReturnValue({
+            toArray: vi.fn().mockResolvedValue([
               { _id: "doc1", name: "test1" },
               { _id: "doc2", name: "test2" }
             ])
           }),
-          distinct: sinon.stub().resolves([name])
+          distinct: vi.fn().mockResolvedValue([name])
         };
       }
 
 
       mockAutoRollbackCollection = {
         collectionName: "autoRollback",
-        bulkWrite: sinon.stub().resolves({ insertedCount: 1 }),
-        distinct: sinon.stub().resolves(["testCollection"]),
-        find: sinon.stub().returns({
-          sort: sinon.stub().returnsThis(),
-          project: sinon.stub().returnsThis(),
-          toArray: sinon.stub().resolves([])
+        bulkWrite: vi.fn().mockResolvedValue({ insertedCount: 1 }),
+        distinct: vi.fn().mockResolvedValue(["testCollection"]),
+        find: vi.fn().mockReturnValue({
+          sort: vi.fn().mockReturnThis(),
+          project: vi.fn().mockReturnThis(),
+          toArray: vi.fn().mockResolvedValue([])
         }),
-        deleteMany: sinon.stub().resolves({ deletedCount: 1 })
+        deleteMany: vi.fn().mockResolvedValue({ deletedCount: 1 })
       };
 
       // Create mock db with originalCollection method
@@ -122,13 +104,13 @@ describe("database - autoRollback feature", () => {
 
       mockDb = {
         collection: originalCollectionFunc,
-        close: sinon.stub(),
+        close: vi.fn(),
         isRollback: false,
         migrationFile: "test-migration.js",
         autoRollbackCounter: 0
       };
 
-      client.db.returns(mockDb);
+      client.db.mockReturnValue(mockDb);
     });
 
     it("should wrap collection methods when autoRollbackEnabled is true", async () => {
@@ -139,13 +121,13 @@ describe("database - autoRollback feature", () => {
 
       const collection = result.db.collection("users");
 
-      expect(typeof collection.insertOne).to.equal("function");
-      expect(typeof collection.insertMany).to.equal("function");
-      expect(typeof collection.updateOne).to.equal("function");
-      expect(typeof collection.updateMany).to.equal("function");
-      expect(typeof collection.replaceOne).to.equal("function");
-      expect(typeof collection.deleteOne).to.equal("function");
-      expect(typeof collection.deleteMany).to.equal("function");
+      expect(typeof collection.insertOne).toBe("function");
+      expect(typeof collection.insertMany).toBe("function");
+      expect(typeof collection.updateOne).toBe("function");
+      expect(typeof collection.updateMany).toBe("function");
+      expect(typeof collection.replaceOne).toBe("function");
+      expect(typeof collection.deleteOne).toBe("function");
+      expect(typeof collection.deleteMany).toBe("function");
     });
 
     it("should not wrap collection methods when autoRollbackEnabled is false", async () => {
@@ -155,8 +137,8 @@ describe("database - autoRollback feature", () => {
       const collection = result.db.collection("users");
 
       // Should return the original mock collection - verify by checking it has the original methods
-      expect(collection.insertOne).to.exist;
-      expect(collection.collectionName).to.equal("users");
+      expect(collection.insertOne).toBeDefined();
+      expect(collection.collectionName).toBe("users");
     });
 
     it("should store rollback entry when insertOne is called", async () => {
@@ -169,15 +151,15 @@ describe("database - autoRollback feature", () => {
       await collection.insertOne({ name: "John" });
 
       // Verify rollback entry was created
-      expect(mockAutoRollbackCollection.bulkWrite.calledOnce).to.equal(true);
-      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.getCall(0).args[0];
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledOnce();
+      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0];
       
-      expect(bulkWriteOps).to.be.an("array");
-      expect(bulkWriteOps).to.have.lengthOf(1);
-      expect(bulkWriteOps[0].insertOne).to.exist;
-      expect(bulkWriteOps[0].insertOne.collection).to.equal("users");
-      expect(bulkWriteOps[0].insertOne.migrationFile).to.equal("test-migration.js");
-      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({ deleteOne: { filter: { _id: "123" } } });
+      expect(bulkWriteOps).toBeInstanceOf(Array);
+      expect(bulkWriteOps).toHaveLength(1);
+      expect(bulkWriteOps[0].insertOne).toBeDefined();
+      expect(bulkWriteOps[0].insertOne.collection).toBe("users");
+      expect(bulkWriteOps[0].insertOne.migrationFile).toBe("test-migration.js");
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({ deleteOne: { filter: { _id: "123" } } });
     });
 
     it("should store rollback entry when insertMany is called", async () => {
@@ -190,13 +172,13 @@ describe("database - autoRollback feature", () => {
       const docs = [{ name: "John" }, { name: "Jane" }];
       await collection.insertMany(docs);
 
-      expect(mockAutoRollbackCollection.bulkWrite.calledOnce).to.equal(true);
-      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.getCall(0).args[0];
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledOnce();
+      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0];
       
-      expect(bulkWriteOps).to.be.an("array");
-      expect(bulkWriteOps).to.have.lengthOf(1);
-      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({ deleteMany: { filter: { _id: { $in: ["1", "2"] } } } });
-      expect(bulkWriteOps[0].insertOne.migrationFile).to.equal("test-migration.js");
+      expect(bulkWriteOps).toBeInstanceOf(Array);
+      expect(bulkWriteOps).toHaveLength(1);
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({ deleteMany: { filter: { _id: { $in: ["1", "2"] } } } });
+      expect(bulkWriteOps[0].insertOne.migrationFile).toBe("test-migration.js");
     });
 
     it("should store rollback entry when updateOne is called", async () => {
@@ -208,12 +190,12 @@ describe("database - autoRollback feature", () => {
       const collection = result.db.collection("users");
       await collection.updateOne({ name: "John" }, { $set: { age: 30 } });
 
-      expect(mockAutoRollbackCollection.bulkWrite.calledOnce).to.equal(true);
-      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.getCall(0).args[0];
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledOnce();
+      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0];
       
-      expect(bulkWriteOps).to.be.an("array");
-      expect(bulkWriteOps).to.have.lengthOf(1);
-      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({
+      expect(bulkWriteOps).toBeInstanceOf(Array);
+      expect(bulkWriteOps).toHaveLength(1);
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
         replaceOne: {
           filter: { _id: "doc1" },
           replacement: { _id: "doc1", name: "test" }
@@ -230,18 +212,18 @@ describe("database - autoRollback feature", () => {
       const collection = result.db.collection("users");
       await collection.updateMany({ age: { $gt: 20 } }, { $set: { active: true } });
 
-      expect(mockAutoRollbackCollection.bulkWrite.calledOnce).to.equal(true);
-      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.getCall(0).args[0];
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledOnce();
+      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0];
       
-      expect(bulkWriteOps).to.be.an("array");
-      expect(bulkWriteOps).to.have.lengthOf(2);
-      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({
+      expect(bulkWriteOps).toBeInstanceOf(Array);
+      expect(bulkWriteOps).toHaveLength(2);
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
         replaceOne: {
           filter: { _id: "doc1" },
           replacement: { _id: "doc1", name: "test1" }
         }
       });
-      expect(bulkWriteOps[1].insertOne.bulkWriteOperation).to.deep.equal({
+      expect(bulkWriteOps[1].insertOne.bulkWriteOperation).toEqual({
         replaceOne: {
           filter: { _id: "doc2" },
           replacement: { _id: "doc2", name: "test2" }
@@ -258,12 +240,12 @@ describe("database - autoRollback feature", () => {
       const collection = result.db.collection("users");
       await collection.deleteOne({ name: "John" });
 
-      expect(mockAutoRollbackCollection.bulkWrite.calledOnce).to.equal(true);
-      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.getCall(0).args[0];
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledOnce();
+      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0];
       
-      expect(bulkWriteOps).to.be.an("array");
-      expect(bulkWriteOps).to.have.lengthOf(1);
-      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({
+      expect(bulkWriteOps).toBeInstanceOf(Array);
+      expect(bulkWriteOps).toHaveLength(1);
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
         insertOne: { _id: "doc1", name: "test" }
       });
     });
@@ -278,15 +260,15 @@ describe("database - autoRollback feature", () => {
       const docsToDelete = [{ name: "John" }, { name: "Jane" }];
       await collection.deleteMany(docsToDelete);
 
-      expect(mockAutoRollbackCollection.bulkWrite.calledOnce).to.equal(true);
-      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.getCall(0).args[0];
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledOnce();
+      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0];
       
-      expect(bulkWriteOps).to.be.an("array");
-      expect(bulkWriteOps).to.have.lengthOf(2);
-      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({
+      expect(bulkWriteOps).toBeInstanceOf(Array);
+      expect(bulkWriteOps).toHaveLength(2);
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
         insertOne: { _id: "doc1", name: "test1" }
       });
-      expect(bulkWriteOps[1].insertOne.bulkWriteOperation).to.deep.equal({
+      expect(bulkWriteOps[1].insertOne.bulkWriteOperation).toEqual({
         insertOne: { _id: "doc2", name: "test2" }
       });
     });
@@ -299,12 +281,12 @@ describe("database - autoRollback feature", () => {
       
       const collection = result.db.collection("users");
       await collection.replaceOne({ name: "John" }, { name: "John", age: 40 });
-      expect(mockAutoRollbackCollection.bulkWrite.calledOnce).to.equal(true);
-      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.getCall(0).args[0];
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledOnce();
+      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0];
       
-      expect(bulkWriteOps).to.be.an("array");
-      expect(bulkWriteOps).to.have.lengthOf(1);
-      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).to.deep.equal({
+      expect(bulkWriteOps).toBeInstanceOf(Array);
+      expect(bulkWriteOps).toHaveLength(1);
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
         replaceOne: {
           filter: { _id: "doc1" },
           replacement: { _id: "doc1", name: "test" }
@@ -324,15 +306,15 @@ describe("database - autoRollback feature", () => {
       await collection.insertOne({ name: "Jane" });
       await collection.insertOne({ name: "Bob" });
 
-      expect(mockAutoRollbackCollection.bulkWrite.callCount).to.equal(3);
+      expect(mockAutoRollbackCollection.bulkWrite.mock.calls.length).toBe(3);
       
-      const entry1 = mockAutoRollbackCollection.bulkWrite.getCall(0).args[0][0].insertOne;
-      const entry2 = mockAutoRollbackCollection.bulkWrite.getCall(1).args[0][0].insertOne;
-      const entry3 = mockAutoRollbackCollection.bulkWrite.getCall(2).args[0][0].insertOne;
+      const entry1 = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0][0].insertOne;
+      const entry2 = mockAutoRollbackCollection.bulkWrite.mock.calls[1][0][0].insertOne;
+      const entry3 = mockAutoRollbackCollection.bulkWrite.mock.calls[2][0][0].insertOne;
       
-      expect(entry1.orderIndex).to.equal(0);
-      expect(entry2.orderIndex).to.equal(1);
-      expect(entry3.orderIndex).to.equal(2);
+      expect(entry1.orderIndex).toBe(0);
+      expect(entry2.orderIndex).toBe(1);
+      expect(entry3.orderIndex).toBe(2);
     });
   });
 
@@ -343,26 +325,26 @@ describe("database - autoRollback feature", () => {
 
     beforeEach(() => {
       mockCollection = {
-        insertOne: sinon.stub().resolves({ insertedId: "123" }),
-        insertMany: sinon.stub().resolves({ insertedIds: ["1", "2"] }),
-        replaceOne: sinon.stub().resolves({ modifiedCount: 1 }),
-        deleteOne: sinon.stub().resolves({ deletedCount: 1 }),
-        deleteMany: sinon.stub().resolves({ deletedCount: 2 }),
-        bulkWrite: sinon.stub().resolves({ insertedCount: 1 })
+        insertOne: vi.fn().mockResolvedValue({ insertedId: "123" }),
+        insertMany: vi.fn().mockResolvedValue({ insertedIds: ["1", "2"] }),
+        replaceOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+        deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 }),
+        deleteMany: vi.fn().mockResolvedValue({ deletedCount: 2 }),
+        bulkWrite: vi.fn().mockResolvedValue({ insertedCount: 1 })
       };
 
       mockAutoRollbackCollection = {
-        distinct: sinon.stub().resolves([]),
-        find: sinon.stub().returns({
-          sort: sinon.stub().returnsThis(),
-          project: sinon.stub().returnsThis(),
-          toArray: sinon.stub().resolves([])
+        distinct: vi.fn().mockResolvedValue([]),
+        find: vi.fn().mockReturnValue({
+          sort: vi.fn().mockReturnThis(),
+          project: vi.fn().mockReturnThis(),
+          toArray: vi.fn().mockResolvedValue([])
         }),
-        deleteMany: sinon.stub().resolves({ deletedCount: 1 })
+        deleteMany: vi.fn().mockResolvedValue({ deletedCount: 1 })
       };
 
       mockDb = {
-        collection: sinon.stub().callsFake((name) => {
+        collection: vi.fn().mockImplementation((name) => {
           if (name === "autoRollback") {
             return mockAutoRollbackCollection;
           }
@@ -374,25 +356,18 @@ describe("database - autoRollback feature", () => {
 
       // Reset client to have close method
       client = {
-        db: sinon.stub().returns(mockDb),
-        close: sinon.stub()
+        db: vi.fn().mockReturnValue(mockDb),
+        close: vi.fn()
       };
       
-      mongodb.MongoClient.connect.returns(Promise.resolve(client));
+      vi.spyOn(mongodb.MongoClient, "connect").mockResolvedValue(client);
     });
 
     it("should not execute rollback when isRollback is false", async () => {
       const result = await database.connect();
       result.db.isRollback = false;
 
-      try {
-        await result.db.autoRollback();
-      } catch (err) {
-        expect(err.message).to.equal("Auto-rollback is not enabled for this migration.");
-        return;
-      }
-      
-      expect.fail("Error was not thrown");
+      await expect(result.db.autoRollback()).rejects.toThrow("Auto-rollback is not enabled for this migration.");
     });
 
     it("should fetch rollback entries for the current migration file", async () => {
@@ -402,24 +377,24 @@ describe("database - autoRollback feature", () => {
 
       await result.db.autoRollback();
 
-      expect(mockAutoRollbackCollection.distinct.calledOnce).to.equal(true);
-      expect(mockAutoRollbackCollection.distinct.getCall(0).args[0]).to.equal("collection");
-      expect(mockAutoRollbackCollection.distinct.getCall(0).args[1]).to.deep.equal({
+      expect(mockAutoRollbackCollection.distinct).toHaveBeenCalledOnce();
+      expect(mockAutoRollbackCollection.distinct.mock.calls[0][0]).toBe("collection");
+      expect(mockAutoRollbackCollection.distinct.mock.calls[0][1]).toEqual({
         migrationFile: "test-migration.js"
       });
     });
 
     it("should execute insertOne rollback operation", async () => {
-      mockAutoRollbackCollection.distinct.resolves(["users"]);
+      mockAutoRollbackCollection.distinct.mockResolvedValue(["users"]);
       
       const rollbackEntries = [{
         bulkWriteOperation: { insertOne: { _id: "doc1", name: "John" } }
       }];
 
-      mockAutoRollbackCollection.find.returns({
-        sort: sinon.stub().returnsThis(),
-        project: sinon.stub().returnsThis(),
-        toArray: sinon.stub().resolves(rollbackEntries)
+      mockAutoRollbackCollection.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(rollbackEntries)
       });
 
       const result = await database.connect();
@@ -428,25 +403,25 @@ describe("database - autoRollback feature", () => {
 
       await result.db.autoRollback();
 
-      expect(mockCollection.bulkWrite.calledOnce).to.equal(true);
-      const operations = mockCollection.bulkWrite.getCall(0).args[0];
-      expect(operations).to.deep.equal([{
+      expect(mockCollection.bulkWrite).toHaveBeenCalledOnce();
+      const operations = mockCollection.bulkWrite.mock.calls[0][0];
+      expect(operations).toEqual([{
         insertOne: { _id: "doc1", name: "John" }
       }]);
     });
 
     it("should execute insertMany rollback operation", async () => {
-      mockAutoRollbackCollection.distinct.resolves(["users"]);
+      mockAutoRollbackCollection.distinct.mockResolvedValue(["users"]);
       
       const rollbackEntries = [
         { bulkWriteOperation: { insertOne: { _id: "doc1", name: "John" } } },
         { bulkWriteOperation: { insertOne: { _id: "doc2", name: "Jane" } } }
       ];
 
-      mockAutoRollbackCollection.find.returns({
-        sort: sinon.stub().returnsThis(),
-        project: sinon.stub().returnsThis(),
-        toArray: sinon.stub().resolves(rollbackEntries)
+      mockAutoRollbackCollection.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(rollbackEntries)
       });
 
       const result = await database.connect();
@@ -455,16 +430,16 @@ describe("database - autoRollback feature", () => {
 
       await result.db.autoRollback();
 
-      expect(mockCollection.bulkWrite.calledOnce).to.equal(true);
-      const operations = mockCollection.bulkWrite.getCall(0).args[0];
-      expect(operations).to.deep.equal([
+      expect(mockCollection.bulkWrite).toHaveBeenCalledOnce();
+      const operations = mockCollection.bulkWrite.mock.calls[0][0];
+      expect(operations).toEqual([
         { insertOne: { _id: "doc1", name: "John" } },
         { insertOne: { _id: "doc2", name: "Jane" } }
       ]);
     });
 
     it("should execute replaceOne rollback operation", async () => {
-      mockAutoRollbackCollection.distinct.resolves(["users"]);
+      mockAutoRollbackCollection.distinct.mockResolvedValue(["users"]);
       
       const rollbackEntries = [{
         bulkWriteOperation: {
@@ -475,10 +450,10 @@ describe("database - autoRollback feature", () => {
         }
       }];
 
-      mockAutoRollbackCollection.find.returns({
-        sort: sinon.stub().returnsThis(),
-        project: sinon.stub().returnsThis(),
-        toArray: sinon.stub().resolves(rollbackEntries)
+      mockAutoRollbackCollection.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(rollbackEntries)
       });
 
       const result = await database.connect();
@@ -487,9 +462,9 @@ describe("database - autoRollback feature", () => {
 
       await result.db.autoRollback();
 
-      expect(mockCollection.bulkWrite.calledOnce).to.equal(true);
-      const operations = mockCollection.bulkWrite.getCall(0).args[0];
-      expect(operations).to.deep.equal([{
+      expect(mockCollection.bulkWrite).toHaveBeenCalledOnce();
+      const operations = mockCollection.bulkWrite.mock.calls[0][0];
+      expect(operations).toEqual([{
         replaceOne: {
           filter: { _id: "doc1" },
           replacement: { _id: "doc1", name: "John", age: 25 }
@@ -498,7 +473,7 @@ describe("database - autoRollback feature", () => {
     });
 
     it("should execute updateOne rollback operation", async () => {
-      mockAutoRollbackCollection.distinct.resolves(["users"]);
+      mockAutoRollbackCollection.distinct.mockResolvedValue(["users"]);
       
       const rollbackEntries = [{
         bulkWriteOperation: {
@@ -509,10 +484,10 @@ describe("database - autoRollback feature", () => {
         }
       }];
 
-      mockAutoRollbackCollection.find.returns({
-        sort: sinon.stub().returnsThis(),
-        project: sinon.stub().returnsThis(),
-        toArray: sinon.stub().resolves(rollbackEntries)
+      mockAutoRollbackCollection.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(rollbackEntries)
       });
 
       const result = await database.connect();
@@ -521,9 +496,9 @@ describe("database - autoRollback feature", () => {
 
       await result.db.autoRollback();
 
-      expect(mockCollection.bulkWrite.calledOnce).to.equal(true);
-      const operations = mockCollection.bulkWrite.getCall(0).args[0];
-      expect(operations).to.deep.equal([{
+      expect(mockCollection.bulkWrite).toHaveBeenCalledOnce();
+      const operations = mockCollection.bulkWrite.mock.calls[0][0];
+      expect(operations).toEqual([{
         replaceOne: {
           filter: { _id: "doc1" },
           replacement: { _id: "doc1", name: "John" }
@@ -532,7 +507,7 @@ describe("database - autoRollback feature", () => {
     });
 
     it("should execute updateMany rollback operation", async () => {
-      mockAutoRollbackCollection.distinct.resolves(["users"]);
+      mockAutoRollbackCollection.distinct.mockResolvedValue(["users"]);
       
       const rollbackEntries = [
         {
@@ -553,10 +528,10 @@ describe("database - autoRollback feature", () => {
         }
       ];
 
-      mockAutoRollbackCollection.find.returns({
-        sort: sinon.stub().returnsThis(),
-        project: sinon.stub().returnsThis(),
-        toArray: sinon.stub().resolves(rollbackEntries)
+      mockAutoRollbackCollection.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(rollbackEntries)
       });
 
       const result = await database.connect();
@@ -565,16 +540,16 @@ describe("database - autoRollback feature", () => {
 
       await result.db.autoRollback();
 
-      expect(mockCollection.bulkWrite.calledOnce).to.equal(true);
-      const operations = mockCollection.bulkWrite.getCall(0).args[0];
-      expect(operations).to.have.lengthOf(2);
-      expect(operations[0]).to.deep.equal({
+      expect(mockCollection.bulkWrite).toHaveBeenCalledOnce();
+      const operations = mockCollection.bulkWrite.mock.calls[0][0];
+      expect(operations).toHaveLength(2);
+      expect(operations[0]).toEqual({
         replaceOne: {
           filter: { _id: "doc1" },
           replacement: { _id: "doc1", name: "John" }
         }
       });
-      expect(operations[1]).to.deep.equal({
+      expect(operations[1]).toEqual({
         replaceOne: {
           filter: { _id: "doc2" },
           replacement: { _id: "doc2", name: "Jane" }
@@ -583,16 +558,16 @@ describe("database - autoRollback feature", () => {
     });
 
     it("should execute deleteOne rollback operation", async () => {
-      mockAutoRollbackCollection.distinct.resolves(["users"]);
+      mockAutoRollbackCollection.distinct.mockResolvedValue(["users"]);
       
       const rollbackEntries = [{
         bulkWriteOperation: { deleteOne: { filter: { name: "John" } } }
       }];
 
-      mockAutoRollbackCollection.find.returns({
-        sort: sinon.stub().returnsThis(),
-        project: sinon.stub().returnsThis(),
-        toArray: sinon.stub().resolves(rollbackEntries)
+      mockAutoRollbackCollection.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(rollbackEntries)
       });
 
       const result = await database.connect();
@@ -601,24 +576,24 @@ describe("database - autoRollback feature", () => {
 
       await result.db.autoRollback();
 
-      expect(mockCollection.bulkWrite.calledOnce).to.equal(true);
-      const operations = mockCollection.bulkWrite.getCall(0).args[0];
-      expect(operations).to.deep.equal([{
+      expect(mockCollection.bulkWrite).toHaveBeenCalledOnce();
+      const operations = mockCollection.bulkWrite.mock.calls[0][0];
+      expect(operations).toEqual([{
         deleteOne: { filter: { name: "John" } }
       }]);
     });
 
     it("should execute deleteMany rollback operation", async () => {
-      mockAutoRollbackCollection.distinct.resolves(["users"]);
+      mockAutoRollbackCollection.distinct.mockResolvedValue(["users"]);
       
       const rollbackEntries = [{
         bulkWriteOperation: { deleteMany: { filter: { $or: [{ name: "John" }, { name: "Jane" }] } } }
       }];
 
-      mockAutoRollbackCollection.find.returns({
-        sort: sinon.stub().returnsThis(),
-        project: sinon.stub().returnsThis(),
-        toArray: sinon.stub().resolves(rollbackEntries)
+      mockAutoRollbackCollection.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(rollbackEntries)
       });
 
       const result = await database.connect();
@@ -627,9 +602,9 @@ describe("database - autoRollback feature", () => {
 
       await result.db.autoRollback();
 
-      expect(mockCollection.bulkWrite.calledOnce).to.equal(true);
-      const operations = mockCollection.bulkWrite.getCall(0).args[0];
-      expect(operations).to.deep.equal([{
+      expect(mockCollection.bulkWrite).toHaveBeenCalledOnce();
+      const operations = mockCollection.bulkWrite.mock.calls[0][0];
+      expect(operations).toEqual([{
         deleteMany: { filter: { $or: [{ name: "John" }, { name: "Jane" }] } }
       }]);
     });
@@ -641,10 +616,10 @@ describe("database - autoRollback feature", () => {
         parameters: { _id: "doc1", name: "John" }
       }];
 
-      mockAutoRollbackCollection.find.returns({
-        sort: sinon.stub().returnsThis(),
-        project: sinon.stub().returnsThis(),
-        toArray: sinon.stub().resolves(rollbackEntries)
+      mockAutoRollbackCollection.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(rollbackEntries)
       });
 
       const result = await database.connect();
@@ -653,14 +628,14 @@ describe("database - autoRollback feature", () => {
 
       await result.db.autoRollback();
 
-      expect(mockAutoRollbackCollection.deleteMany.calledOnce).to.equal(true);
-      expect(mockAutoRollbackCollection.deleteMany.getCall(0).args[0]).to.deep.equal({
+      expect(mockAutoRollbackCollection.deleteMany).toHaveBeenCalledOnce();
+      expect(mockAutoRollbackCollection.deleteMany.mock.calls[0][0]).toEqual({
         migrationFile: "test-migration.js"
       });
     });
 
     it("should execute multiple rollback operations in reverse order", async () => {
-      mockAutoRollbackCollection.distinct.resolves(["users"]);
+      mockAutoRollbackCollection.distinct.mockResolvedValue(["users"]);
       
       const rollbackEntries = [
         { bulkWriteOperation: { insertOne: { _id: "doc3", name: "Bob" } } },
@@ -668,10 +643,10 @@ describe("database - autoRollback feature", () => {
         { bulkWriteOperation: { insertOne: { _id: "doc1", name: "John" } } }
       ];
 
-      mockAutoRollbackCollection.find.returns({
-        sort: sinon.stub().returnsThis(),
-        project: sinon.stub().returnsThis(),
-        toArray: sinon.stub().resolves(rollbackEntries)
+      mockAutoRollbackCollection.find.mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        project: vi.fn().mockReturnThis(),
+        toArray: vi.fn().mockResolvedValue(rollbackEntries)
       });
 
       const result = await database.connect();
@@ -681,9 +656,9 @@ describe("database - autoRollback feature", () => {
       await result.db.autoRollback();
 
       // Should execute all operations in one bulkWrite
-      expect(mockCollection.bulkWrite.calledOnce).to.equal(true);
-      const operations = mockCollection.bulkWrite.getCall(0).args[0];
-      expect(operations).to.have.lengthOf(3);
+      expect(mockCollection.bulkWrite).toHaveBeenCalledOnce();
+      const operations = mockCollection.bulkWrite.mock.calls[0][0];
+      expect(operations).toHaveLength(3);
     });
   });
 });

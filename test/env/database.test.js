@@ -1,5 +1,10 @@
 vi.mock("mongodb");
 vi.mock("fs/promises");
+vi.mock("../../lib/env/autoRollback.js", () => ({
+  default: {
+    wrapDbWithAutoRollback: vi.fn()
+  }
+}));
 
 import config from "../../lib/env/config.js";
 import mongodb from "mongodb";
@@ -37,7 +42,7 @@ describe("database", () => {
     };
     
     return {
-      db: vi.fn().mockReturnValue({ the: "db" }),
+      db: vi.fn().mockReturnValue(mockDb),
       close: "theCloseFnFromMongoClient"
     };
   }
@@ -64,10 +69,10 @@ describe("database", () => {
       );
 
       expect(client.db).toHaveBeenCalledWith("testDb");
-      expect(result.db).toEqual({
-        the: "db",
-        close: "theCloseFnFromMongoClient"
-      });
+      expect(result.db).toBeDefined();
+      expect(result.db.the).toBe("db");
+      expect(result.db.close).toBe("theCloseFnFromMongoClient");
+      expect(typeof result.db.collection).toBe("function");
       expect(result.client).toEqual(client);
     });
 
