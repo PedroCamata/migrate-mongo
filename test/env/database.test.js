@@ -18,10 +18,7 @@ describe("database", () => {
           connectTimeoutMS: 3600000, // 1 hour
           socketTimeoutMS: 3600000 // 1 hour
         }
-      },
-      changelogCollectionName: "changelog",
-      lockCollectionName: "lock",
-      autoRollbackCollectionName: "autoRollback"
+      }
     };
   }
 
@@ -114,4 +111,3 @@ describe("database", () => {
     });
   });
 });
-
