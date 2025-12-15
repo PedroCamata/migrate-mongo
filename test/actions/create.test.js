@@ -1,157 +1,121 @@
-const { expect } = require("chai");
-const sinon = require("sinon");
-const path = require("path");
+import { fileURLToPath } from 'url';
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
-const proxyquire = require("proxyquire");
+import path from "path";
+import fs from "fs/promises";
+import config from "../../lib/env/config.js";
+import migrationsDir from "../../lib/env/migrationsDir.js";
+import create from "../../lib/actions/create.js";
 
 describe("create", () => {
-  let create;
-  let migrationsDir;
-  let config;
-  let fs;
-
-  function mockMigrationsDir() {
-    return {
-      shouldExist: sinon.stub().returns(Promise.resolve()),
-      resolveMigrationFileExtension: sinon.stub().returns('.js'),
-      doesSampleMigrationExist: sinon.stub().returns(Promise.resolve(false))
-    };
-  }
-
-  function mockConfig() {
-    return {
-      shouldExist: sinon.stub().returns(Promise.resolve()),
-      read: sinon.stub().returns(Promise.resolve({
-        moduleSystem: 'commonjs',
-      }))
-    };
-  }
-
-  function mockFs() {
-    return {
-      copy: sinon.stub().returns(Promise.resolve())
-    };
-  }
+  let cpSpy;
 
   beforeEach(() => {
-    migrationsDir = mockMigrationsDir();
-    config = mockConfig();
-    fs = mockFs();
-    create = proxyquire("../../lib/actions/create", {
-      "../env/migrationsDir": migrationsDir,
-      "../env/config": config,
-      "fs-extra": fs
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.spyOn(migrationsDir, 'shouldExist').mockResolvedValue();
+    vi.spyOn(migrationsDir, 'resolveMigrationFileExtension').mockReturnValue('.js');
+    vi.spyOn(migrationsDir, 'doesSampleMigrationExist').mockResolvedValue(false);
+    vi.spyOn(config, 'shouldExist').mockResolvedValue();
+    vi.spyOn(config, 'read').mockResolvedValue({
+      moduleSystem: 'commonjs',
     });
+    cpSpy = vi.spyOn(fs, 'cp').mockResolvedValue();
   });
 
   it("should yield an error when called without a description", async () => {
-    try {
-      await create(null);
-      expect.fail("Error was not thrown");
-    } catch (err) {
-      expect(err.message).to.equal("Missing parameter: description");
-    }
+    await expect(create(null)).rejects.toThrow("Missing parameter: description");
   });
 
   it("should check that the migrations directory exists", async () => {
     await create("my_description");
-    expect(migrationsDir.shouldExist.called).to.equal(true);
+    expect(migrationsDir.shouldExist).toHaveBeenCalled();
   });
 
   it("should yield an error when the migrations directory does not exist", async () => {
-    migrationsDir.shouldExist.returns(
-      Promise.reject(new Error("migrations directory does not exist"))
+    vi.spyOn(migrationsDir, 'shouldExist').mockRejectedValue(
+      new Error("migrations directory does not exist")
     );
-    try {
-      await create("my_description");
-      expect.fail("Error was not thrown");
-    } catch (err) {
-      expect(err.message).to.equal("migrations directory does not exist");
-    }
+    await expect(create("my_description")).rejects.toThrow("migrations directory does not exist");
   });
 
   it("should not be necessary to have an config present", async () => {
     await create("my_description");
-    expect(config.shouldExist.called).to.equal(false);
+    expect(config.shouldExist).not.toHaveBeenCalled();
   });
 
   it("should create a new migration file and yield the filename", async () => {
-    const clock = sinon.useFakeTimers(
-      new Date("2016-06-09T08:07:00.077Z").getTime()
-    );
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2016-06-09T08:07:00.077Z"));
+    
     const filename = await create("my_description");
-    expect(fs.copy.called).to.equal(true);
-    expect(fs.copy.getCall(0).args[0]).to.equal(
-      path.join(__dirname, "../../samples/commonjs/migration.js")
-    );
-    expect(fs.copy.getCall(0).args[1]).to.equal(
+    
+    expect(fs.cp).toHaveBeenCalled();
+    expect(cpSpy).toHaveBeenCalledWith(
+      path.join(__dirname, "../../samples/commonjs/migration.js"),
       path.join(process.cwd(), "migrations", "20160609080700-my_description.js")
     );
-    expect(filename).to.equal("20160609080700-my_description.js");
-    clock.restore();
+    expect(filename).toBe("20160609080700-my_description.js");
+    
+    vi.useRealTimers();
   });
 
   it("should create a new migration file and yield the filename with custom extension", async () => {
-    const clock = sinon.useFakeTimers(
-      new Date("2016-06-09T08:07:00.077Z").getTime()
-    );
-    migrationsDir.resolveMigrationFileExtension.returns('.ts');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2016-06-09T08:07:00.077Z"));
+    
+    vi.spyOn(migrationsDir, 'resolveMigrationFileExtension').mockReturnValue('.ts');
     const filename = await create("my_description");
-    expect(fs.copy.called).to.equal(true);
-    expect(fs.copy.getCall(0).args[0]).to.equal(
-      path.join(__dirname, "../../samples/commonjs/migration.js")
-    );
-    expect(fs.copy.getCall(0).args[1]).to.equal(
+    
+    expect(fs.cp).toHaveBeenCalled();
+    expect(cpSpy).toHaveBeenCalledWith(
+      path.join(__dirname, "../../samples/commonjs/migration.js"),
       path.join(process.cwd(), "migrations", "20160609080700-my_description.ts")
     );
-    expect(filename).to.equal("20160609080700-my_description.ts");
-    clock.restore();
+    expect(filename).toBe("20160609080700-my_description.ts");
+    
+    vi.useRealTimers();
   });
 
   it("should replace spaces in the description with underscores", async () => {
-    const clock = sinon.useFakeTimers(
-      new Date("2016-06-09T08:07:00.077Z").getTime()
-    );
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2016-06-09T08:07:00.077Z"));
+    
     await create("this description contains spaces");
-    expect(fs.copy.called).to.equal(true);
-    expect(fs.copy.getCall(0).args[0]).to.equal(
-      path.join(__dirname, "../../samples/commonjs/migration.js")
-    );
-    expect(fs.copy.getCall(0).args[1]).to.equal(
+    
+    expect(fs.cp).toHaveBeenCalled();
+    expect(cpSpy).toHaveBeenCalledWith(
+      path.join(__dirname, "../../samples/commonjs/migration.js"),
       path.join(
         process.cwd(),
         "migrations",
         "20160609080700-this_description_contains_spaces.js"
       )
     );
-    clock.restore();
+    
+    vi.useRealTimers();
   });
 
   it("should yield errors that occurred when copying the file", async () => {
-    fs.copy.returns(Promise.reject(new Error("Copy failed")));
-    try {
-      await create("my_description");
-      expect.fail("Error was not thrown");
-    } catch (err) {
-      expect(err.message).to.equal("Copy failed");
-    }
+    vi.spyOn(fs, 'cp').mockRejectedValue(new Error("Copy failed"));
+    await expect(create("my_description")).rejects.toThrow("Copy failed");
   });
 
   it("should use the sample migration file if it exists", async () => {
-    const clock = sinon.useFakeTimers(
-        new Date("2016-06-09T08:07:00.077Z").getTime()
-    );
-    migrationsDir.doesSampleMigrationExist.returns(true);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2016-06-09T08:07:00.077Z"));
+    
+    vi.spyOn(migrationsDir, 'doesSampleMigrationExist').mockResolvedValue(true);
     const filename = await create("my_description");
-    expect(migrationsDir.doesSampleMigrationExist.called).to.equal(true);
-    expect(fs.copy.called).to.equal(true);
-    expect(fs.copy.getCall(0).args[0]).to.equal(
-        path.join(process.cwd(), "migrations", "sample-migration.js")
+    
+    expect(migrationsDir.doesSampleMigrationExist).toHaveBeenCalled();
+    expect(fs.cp).toHaveBeenCalled();
+    expect(cpSpy).toHaveBeenCalledWith(
+      path.join(process.cwd(), "migrations", "sample-migration.js"),
+      path.join(process.cwd(), "migrations", "20160609080700-my_description.js")
     );
-    expect(fs.copy.getCall(0).args[1]).to.equal(
-        path.join(process.cwd(), "migrations", "20160609080700-my_description.js")
-    );
-    expect(filename).to.equal("20160609080700-my_description.js");
-    clock.restore();
+    expect(filename).toBe("20160609080700-my_description.js");
+    
+    vi.useRealTimers();
   });
 });

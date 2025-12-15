@@ -4,6 +4,127 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
+## [14.0.7] - 2025-12-03
+- Reorganize test mocks structure
+  - Move __mocks__ directory from project root to test directory
+  - Consolidate all test-related files under test/ for better organization
+
+## [14.0.6] - 2025-12-03
+- Migrate from Jest to Vitest for testing
+  - Full ESM support with native import/export
+  - Backward compatibility: migration scripts can still use CommonJS
+  - Global test functions (it, describe, expect, etc.) via setup file
+  - 100% code coverage maintained with unit tests alone
+  - Faster test execution and better developer experience
+- Switch codebase to ESM (ECMAScript Modules)
+  - Use native import/export syntax throughout
+  - Maintain full CommonJS compatibility for migration scripts
+  - Update package.json with "type": "module"
+  - Add .js extensions to all relative imports
+- Add CommonJS migration script tests to integration suite
+  - Verify backward compatibility with require/module.exports
+  - Ensure existing migration scripts continue to work
+  - Test both ESM and CommonJS migration formats
+
+## [14.0.5] - 2025-12-03
+- Fix CI workflow to run integration tests only after successful unit tests
+  - Prevent integration tests from running if unit tests fail
+  - Add proper job dependency in GitHub Actions
+
+## [14.0.4] - 2025-12-03
+- Integrate integration tests into main CI workflow
+  - Run integration tests after unit tests in GitHub Actions
+  - Remove unnecessary MongoDB version matrix (tests use mongodb-memory-server)
+  - Rename script from `integration-test` to `test:integration` for consistency
+- Expand integration test suite to 56 comprehensive tests
+    - **ESM Module System** (4 tests): init -m esm, config, migration files, export syntax
+    - **Custom Configuration** (4 tests): -f flag, --migrations-dir, custom changelog, DB in URL
+    - **File Hash Feature** (4 tests): useFileHash storage, status display, modification detection
+    - **Migration Blocks** (4 tests): batch rollback with -b flag, block assignment, selective rollback
+    - **Sample Migration Override** (2 tests): custom templates, default fallback
+    - **Client Parameter** (3 tests): client availability in up/down, session support
+    - **File Extensions** (3 tests): .js files, async/await, promise syntax
+    - **Status Command** (3 tests): PENDING display, timestamps, chronological sorting
+    - **CLI Options** (4 tests): -V version, -h help, command help, invalid commands
+    - **Large-Scale Performance** (3 tests): 20+ files, bulk operations, 1000+ documents
+    - Total: 56 integration tests across 15 test suites
+    - Runtime: ~50 seconds, 1,116 lines of code
+    - Covers all documented features and error scenarios
+- Improve integration test suite with better organization and coverage
+    - Split single 214-line test into 22 focused tests across 5 suites
+    - Add comprehensive error scenario testing (8 new tests)
+    - Add multiple migration testing (4 new tests)
+    - Test edge cases: syntax errors, missing functions, invalid configs
+
+## [14.0.3] - 2025-12-03
+- Add comprehensive integration tests
+  - Test full migration lifecycle (init, create, up, down, status)
+  - Uses mongodb-memory-server for isolated testing
+  - Runnable with `npm run integration-test`
+- Add npm scripts for better developer experience
+  - `test:watch` - Run tests in watch mode
+  - `test:ci` - Run tests in CI mode
+  - `lint:fix` - Auto-fix linting issues
+- Add issue and PR templates for better contribution workflow
+- Add `.nvmrc` file for Node.js version management
+- Simplify test mock structure
+  - Remove all `__mocks__` directories
+  - Inline mock implementations directly in test files using Jest factory functions
+  - Improves code readability and maintainability
+
+## [14.0.2] - 2025-12-03
+- Fix ESLint configuration after Jest migration
+  - Replace eslint-plugin-mocha with eslint-plugin-jest
+  - Configure Jest-specific linting rules
+  - Fix test titles with duplicate prefixes
+
+## [14.0.1] - 2025-12-03
+- Migrate test suite from Mocha/Sinon/Chai/Proxyquire to Jest
+  - Improves test maintainability and developer experience
+  - Maintains 100% code coverage
+- Remove fs-extra dependency in favor of native Node.js fs/promises API
+  - Reduces production dependencies from 3 to 2
+  - Eliminates deprecated dependency warnings
+  - Smaller bundle size
+- Migrate from Travis CI to GitHub Actions
+  - Fixes broken CI/coverage reporting (Travis CI discontinued free tier)
+  - Tests now run on Node.js 20.x and 22.x with MongoDB 4.4, 5.0, 6.0, 7.0
+  - Automated Coveralls integration
+  - Added CodeQL security scanning
+  - Added Dependabot for dependency updates
+  - Added automated NPM publishing workflow
+- Remove coveralls CLI dependency (GitHub Actions handles uploads)
+- Fix all npm deprecation warnings (glob@7, inflight)
+
+## [14.0.0] - 2025-12-03
+- **BREAKING**: Remove callback-based migration support
+  - Migrations must now use Promises or async/await
+  - The `up(db, client, callback)` and `down(db, client, callback)` signatures are no longer supported
+  - Use `async function up(db, client)` or return a Promise instead
+- Remove fn-args dependency (reduces production dependencies from 4 to 3)
+- Simplify migration execution code
+- Remove deprecated `useNewUrlParser` and `useUnifiedTopology` options from sample config files
+  - These options are no longer supported in MongoDB driver 4.x+ and will cause errors
+  - Generated config files now have these commented out with explanatory notes
+
+## [13.0.1] - 2025-12-02
+- Remove -md from README, this option does not exist
+
+## [13.0.0] - 2025-12-02
+- Remove date-fns dependency (https://github.com/seppevs/migrate-mongo/issues/467)
+- Fix npm audit vulnerability in @babel/runtime (https://github.com/seppevs/migrate-mongo/issues/466)
+- Fix README typo about ES modules version (https://github.com/seppevs/migrate-mongo/pull/463)
+- Remove deprecated lodash.get in favor of optional chaining (https://github.com/seppevs/migrate-mongo/pull/464)
+- Handle ERR_REQUIRE_ASYNC_MODULE for async ESM modules (https://github.com/seppevs/migrate-mongo/pull/470)
+- Clarify README about working directory requirement (https://github.com/seppevs/migrate-mongo/pull/462)
+- Replace all remaining lodash dependencies with native JavaScript
+- Upgrade dependencies to latest versions (cli-table3, commander, fn-args, fs-extra, eslint, etc.)
+- Remove p-each-series dependency, replace with native for...of loop
+- Fix CLI by removing lodash.isempty/values and updating commander usage
+- Add --migrations-dir command line parameter (https://github.com/seppevs/migrate-mongo/pull/449)
+- Include MongoDB errInfo in error output for better debugging (https://github.com/seppevs/migrate-mongo/pull/451)
+- **BREAKING**: Update minimum Node.js version requirement to 20.0.0 (due to commander@14)
+
 ## [12.1.3] - 2025-02-03
 - Remove accidentally added npm dependency (https://github.com/seppevs/migrate-mongo/pull/460)
 - Fix snyk issues
