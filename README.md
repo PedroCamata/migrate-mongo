@@ -95,7 +95,6 @@ const config = {
   // Collection to store rollback operations
   autoRollbackCollectionName: "auto_rollback_migrations",
 
-
   // Don't change this, unless you know what you're doing
   moduleSystem: 'commonjs',
 };
