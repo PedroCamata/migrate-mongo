@@ -105,7 +105,6 @@ describe("database - autoRollback feature", () => {
       mockDb = {
         collection: originalCollectionFunc,
         close: vi.fn(),
-        isRollback: false,
         migrationFile: "test-migration.js",
         autoRollbackCounter: 0
       };
@@ -116,7 +115,6 @@ describe("database - autoRollback feature", () => {
     it("should wrap collection methods when autoRollbackEnabled is true", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
-      result.db.isRollback = false;
       result.db.migrationFile = "test-migration.js";
 
       const collection = result.db.collection("users");
@@ -144,7 +142,6 @@ describe("database - autoRollback feature", () => {
     it("should store rollback entry when insertOne is called", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
-      result.db.isRollback = false;
       result.db.migrationFile = "test-migration.js";
 
       const collection = result.db.collection("users");
@@ -165,7 +162,6 @@ describe("database - autoRollback feature", () => {
     it("should store rollback entry when insertMany is called", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
-      result.db.isRollback = false;
       result.db.migrationFile = "test-migration.js";
 
       const collection = result.db.collection("users");
@@ -184,7 +180,6 @@ describe("database - autoRollback feature", () => {
     it("should store rollback entry when updateOne is called", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
-      result.db.isRollback = false;
       result.db.migrationFile = "test-migration.js";
 
       const collection = result.db.collection("users");
@@ -206,7 +201,6 @@ describe("database - autoRollback feature", () => {
     it("should store rollback entries when updateMany is called", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
-      result.db.isRollback = false;
       result.db.migrationFile = "test-migration.js";
 
       const collection = result.db.collection("users");
@@ -234,7 +228,6 @@ describe("database - autoRollback feature", () => {
     it("should store rollback entry when deleteOne is called", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
-      result.db.isRollback = false;
       result.db.migrationFile = "test-migration.js";
 
       const collection = result.db.collection("users");
@@ -253,7 +246,6 @@ describe("database - autoRollback feature", () => {
     it("should store rollback entries when deleteMany is called", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
-      result.db.isRollback = false;
       result.db.migrationFile = "test-migration.js";
 
       const collection = result.db.collection("users");
@@ -276,7 +268,6 @@ describe("database - autoRollback feature", () => {
     it("should store rollback entries when replaceOne is called", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
-      result.db.isRollback = false;
       result.db.migrationFile = "test-migration.js";
       
       const collection = result.db.collection("users");
@@ -297,7 +288,6 @@ describe("database - autoRollback feature", () => {
     it("should increment autoRollbackCounter for each operation", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
-      result.db.isRollback = false;
       result.db.migrationFile = "test-migration.js";
 
       const collection = result.db.collection("users");
@@ -350,7 +340,6 @@ describe("database - autoRollback feature", () => {
           }
           return mockCollection;
         }),
-        isRollback: true,
         migrationFile: "test-migration.js"
       };
 
@@ -363,16 +352,8 @@ describe("database - autoRollback feature", () => {
       vi.spyOn(mongodb.MongoClient, "connect").mockResolvedValue(client);
     });
 
-    it("should not execute rollback when isRollback is false", async () => {
-      const result = await database.connect();
-      result.db.isRollback = false;
-
-      await expect(result.db.autoRollback()).rejects.toThrow("Auto-rollback is not enabled for this migration.");
-    });
-
     it("should fetch rollback entries for the current migration file", async () => {
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
@@ -398,7 +379,6 @@ describe("database - autoRollback feature", () => {
       });
 
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
@@ -425,7 +405,6 @@ describe("database - autoRollback feature", () => {
       });
 
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
@@ -457,7 +436,6 @@ describe("database - autoRollback feature", () => {
       });
 
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
@@ -491,7 +469,6 @@ describe("database - autoRollback feature", () => {
       });
 
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
@@ -535,7 +512,6 @@ describe("database - autoRollback feature", () => {
       });
 
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
@@ -571,7 +547,6 @@ describe("database - autoRollback feature", () => {
       });
 
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
@@ -597,7 +572,6 @@ describe("database - autoRollback feature", () => {
       });
 
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
@@ -623,7 +597,6 @@ describe("database - autoRollback feature", () => {
       });
 
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
@@ -650,7 +623,6 @@ describe("database - autoRollback feature", () => {
       });
 
       const result = await database.connect();
-      result.db.isRollback = true;
       result.db.migrationFile = "test-migration.js";
 
       await result.db.autoRollback();
