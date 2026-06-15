@@ -191,9 +191,51 @@ describe("database - autoRollback feature", () => {
       expect(bulkWriteOps).toBeInstanceOf(Array);
       expect(bulkWriteOps).toHaveLength(1);
       expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
-        replaceOne: {
+        updateOne: {
           filter: { _id: "doc1" },
-          replacement: { _id: "doc1", name: "test" }
+          update: { $unset: { age: "" } }
+        }
+      });
+    });
+
+    it("should restore previous values when updateOne changes existing fields", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+      result.db.migrationFile = "test-migration.js";
+
+      const collection = result.db.collection("users");
+      await collection.updateOne({ name: "John" }, { $set: { name: "Jane" } });
+
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledOnce();
+      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0];
+
+      expect(bulkWriteOps).toBeInstanceOf(Array);
+      expect(bulkWriteOps).toHaveLength(1);
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
+        updateOne: {
+          filter: { _id: "doc1" },
+          update: { $set: { name: "test" } }
+        }
+      });
+    });
+
+    it("should store an updateOne rollback for pipeline updates", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+      result.db.migrationFile = "test-migration.js";
+
+      const collection = result.db.collection("users");
+      await collection.updateOne({ name: "John" }, [{ $set: { age: 30 } }]);
+
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledOnce();
+      const bulkWriteOps = mockAutoRollbackCollection.bulkWrite.mock.calls[0][0];
+
+      expect(bulkWriteOps).toBeInstanceOf(Array);
+      expect(bulkWriteOps).toHaveLength(1);
+      expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
+        updateOne: {
+          filter: { _id: "doc1" },
+          update: [{ $replaceRoot: { newRoot: { $literal: { _id: "doc1", name: "test" } } } }]
         }
       });
     });
@@ -212,15 +254,15 @@ describe("database - autoRollback feature", () => {
       expect(bulkWriteOps).toBeInstanceOf(Array);
       expect(bulkWriteOps).toHaveLength(2);
       expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
-        replaceOne: {
+        updateOne: {
           filter: { _id: "doc1" },
-          replacement: { _id: "doc1", name: "test1" }
+          update: { $unset: { active: "" } }
         }
       });
       expect(bulkWriteOps[1].insertOne.bulkWriteOperation).toEqual({
-        replaceOne: {
+        updateOne: {
           filter: { _id: "doc2" },
-          replacement: { _id: "doc2", name: "test2" }
+          update: { $unset: { active: "" } }
         }
       });
     });
@@ -455,9 +497,9 @@ describe("database - autoRollback feature", () => {
       
       const rollbackEntries = [{
         bulkWriteOperation: {
-          replaceOne: {
+          updateOne: {
             filter: { _id: "doc1" },
-            replacement: { _id: "doc1", name: "John" }
+            update: { $set: { name: "John" } }
           }
         }
       }];
@@ -476,9 +518,9 @@ describe("database - autoRollback feature", () => {
       expect(mockCollection.bulkWrite).toHaveBeenCalledOnce();
       const operations = mockCollection.bulkWrite.mock.calls[0][0];
       expect(operations).toEqual([{
-        replaceOne: {
+        updateOne: {
           filter: { _id: "doc1" },
-          replacement: { _id: "doc1", name: "John" }
+          update: { $set: { name: "John" } }
         }
       }]);
     });
@@ -489,17 +531,17 @@ describe("database - autoRollback feature", () => {
       const rollbackEntries = [
         {
           bulkWriteOperation: {
-            replaceOne: {
+            updateOne: {
               filter: { _id: "doc1" },
-              replacement: { _id: "doc1", name: "John" }
+              update: { $set: { name: "John" } }
             }
           }
         },
         {
           bulkWriteOperation: {
-            replaceOne: {
+            updateOne: {
               filter: { _id: "doc2" },
-              replacement: { _id: "doc2", name: "Jane" }
+              update: { $set: { name: "Jane" } }
             }
           }
         }
@@ -520,15 +562,15 @@ describe("database - autoRollback feature", () => {
       const operations = mockCollection.bulkWrite.mock.calls[0][0];
       expect(operations).toHaveLength(2);
       expect(operations[0]).toEqual({
-        replaceOne: {
+        updateOne: {
           filter: { _id: "doc1" },
-          replacement: { _id: "doc1", name: "John" }
+          update: { $set: { name: "John" } }
         }
       });
       expect(operations[1]).toEqual({
-        replaceOne: {
+        updateOne: {
           filter: { _id: "doc2" },
-          replacement: { _id: "doc2", name: "Jane" }
+          update: { $set: { name: "Jane" } }
         }
       });
     });
