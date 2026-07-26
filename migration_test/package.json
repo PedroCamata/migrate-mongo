@@ -1,0 +1,13 @@
+{
+  "name": "migration_test",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "migrate-mongo-config.js",
+  "scripts": {
+    "up": "node /home/pedro/Projects/migrate-mongo/bin/migrate-mongo.js up",
+    "down": "node /home/pedro/Projects/migrate-mongo/bin/migrate-mongo.js down"
+  }
+}
