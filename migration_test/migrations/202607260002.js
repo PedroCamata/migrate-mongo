@@ -4,7 +4,11 @@ module.exports = {
     db.autoRollbackEnabled = true;
     await db.collection('test_collection').updateOne(
       {metaId: 1},
-      {$set: {text: "2222"}});
+      {
+        $set: {text: "2222", newField: "welcome"},
+        $pull: {a: "1", b: "1"}
+      }
+    );
 
     
   },
