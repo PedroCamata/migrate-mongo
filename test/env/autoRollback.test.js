@@ -191,9 +191,9 @@ describe("database - autoRollback feature", () => {
       expect(bulkWriteOps).toBeInstanceOf(Array);
       expect(bulkWriteOps).toHaveLength(1);
       expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
-        replaceOne: {
+        updateOne: {
           filter: { _id: "doc1" },
-          replacement: { _id: "doc1", name: "test" }
+          update: { "$unset": { "age": ""} }
         }
       });
     });
@@ -212,15 +212,15 @@ describe("database - autoRollback feature", () => {
       expect(bulkWriteOps).toBeInstanceOf(Array);
       expect(bulkWriteOps).toHaveLength(2);
       expect(bulkWriteOps[0].insertOne.bulkWriteOperation).toEqual({
-        replaceOne: {
+        updateOne: {
           filter: { _id: "doc1" },
-          replacement: { _id: "doc1", name: "test1" }
+          update: { "$unset": { "active": "" } }
         }
       });
       expect(bulkWriteOps[1].insertOne.bulkWriteOperation).toEqual({
-        replaceOne: {
+        updateOne: {
           filter: { _id: "doc2" },
-          replacement: { _id: "doc2", name: "test2" }
+          update: { "$unset": { "active": "" }}
         }
       });
     });
