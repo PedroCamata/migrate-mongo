@@ -56,16 +56,21 @@ describe("database - autoRollback feature", () => {
   describe("collection method wrapping", () => {
     let mockDb;
     let mockAutoRollbackCollection;
+    let updateOneResult;
+    let updateManyResult;
 
     beforeEach(() => {
+      updateOneResult = { modifiedCount: 1 };
+      updateManyResult = { modifiedCount: 2 };
+
       // Function to create a fresh mock collection
       function createMockCollection(name) {
         return {
           collectionName: name,
           insertOne: vi.fn().mockResolvedValue({ insertedId: "123" }),
           insertMany: vi.fn().mockResolvedValue({ insertedIds: ["1", "2"] }),
-          updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
-          updateMany: vi.fn().mockResolvedValue({ modifiedCount: 2 }),
+          updateOne: vi.fn().mockResolvedValue(updateOneResult),
+          updateMany: vi.fn().mockResolvedValue(updateManyResult),
           replaceOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
           deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 }),
           deleteMany: vi.fn().mockResolvedValue({ deletedCount: 2 }),
@@ -198,6 +203,143 @@ describe("database - autoRollback feature", () => {
       });
     });
 
+    it("should restore both sides of a nested field rename", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+      result.db.migrationFile = "test-migration.js";
+
+      const collection = result.db.collection("users");
+      collection.findOne.mockResolvedValue({
+        _id: "doc1",
+        profile: { name: "John" },
+        settings: { previousName: "Legacy" }
+      });
+
+      await collection.updateOne(
+        { _id: "doc1" },
+        { $rename: { "profile.name": "settings.previousName" } }
+      );
+
+      expect(collection.findOne).toHaveBeenCalledWith(
+        { _id: "doc1" },
+        { projection: { "profile.name": 1, "settings.previousName": 1 } }
+      );
+      expect(mockAutoRollbackCollection.bulkWrite.mock.calls[0][0][0].insertOne.bulkWriteOperation).toEqual({
+        updateOne: {
+          filter: { _id: "doc1" },
+          update: {
+            $set: {
+              "profile.name": "John",
+              "settings.previousName": "Legacy"
+            }
+          }
+        }
+      });
+    });
+
+    it("should reject aggregation-pipeline updates before executing them", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+
+      const collection = result.db.collection("users");
+
+      await expect(collection.updateOne(
+        { _id: "doc1" },
+        [{ $set: { age: 30 } }]
+      )).rejects.toThrow("Auto-rollback cannot invert aggregation-pipeline style updates");
+    });
+
+    it("should ignore update documents without supported modifiers", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+
+      const collection = result.db.collection("users");
+      await collection.updateOne({ _id: "doc1" });
+      await collection.updateOne({ _id: "doc1" }, { name: "John", $set: null });
+
+      expect(collection.findOne).not.toHaveBeenCalled();
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledTimes(2);
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenNthCalledWith(1, [], { ordered: true });
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenNthCalledWith(2, [], { ordered: true });
+    });
+
+    it("should ignore $setOnInsert when finding modified paths", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+
+      const collection = result.db.collection("users");
+      await collection.updateOne({ _id: "doc1" }, { $setOnInsert: { name: "John" } });
+      await collection.updateMany({ active: false }, { $setOnInsert: { active: true } });
+
+      expect(collection.findOne).not.toHaveBeenCalled();
+      expect(collection.find).not.toHaveBeenCalled();
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledTimes(2);
+      expect(mockAutoRollbackCollection.bulkWrite).toHaveBeenCalledWith([], { ordered: true });
+    });
+
+    it("should restore the root array for positional update paths", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+      result.db.migrationFile = "test-migration.js";
+
+      const collection = result.db.collection("users");
+      collection.findOne.mockResolvedValue({ _id: "doc1", tags: ["existing"] });
+
+      await collection.updateOne({ _id: "doc1" }, { $push: { "tags.$[]": "new" } });
+
+      expect(collection.findOne).toHaveBeenCalledWith(
+        { _id: "doc1" },
+        { projection: { tags: 1 } }
+      );
+      expect(mockAutoRollbackCollection.bulkWrite.mock.calls[0][0][0].insertOne.bulkWriteOperation).toEqual({
+        updateOne: {
+          filter: { _id: "doc1" },
+          update: { $set: { tags: ["existing"] } }
+        }
+      });
+    });
+
+    it("should tolerate a nested value that becomes unavailable while being read", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+      result.db.migrationFile = "test-migration.js";
+
+      let profileReads = 0;
+      const beforeDocument = { _id: "doc1" };
+      Object.defineProperty(beforeDocument, "profile", {
+        enumerable: true,
+        get: () => (++profileReads === 1 ? { name: "John" } : null)
+      });
+
+      const collection = result.db.collection("users");
+      collection.findOne.mockResolvedValue(beforeDocument);
+
+      await collection.updateOne({ _id: "doc1" }, { $set: { "profile.name": "Jane" } });
+
+      expect(mockAutoRollbackCollection.bulkWrite.mock.calls[0][0][0].insertOne.bulkWriteOperation).toEqual({
+        updateOne: {
+          filter: { _id: "doc1" },
+          update: { $set: { "profile.name": undefined } }
+        }
+      });
+    });
+
+    it("should record a delete rollback when updateOne upserts a document", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+      result.db.migrationFile = "test-migration.js";
+
+      updateOneResult = { upsertedId: "new-doc" };
+      const collection = result.db.collection("users");
+      collection.findOne.mockResolvedValue(null);
+
+      await collection.updateOne({ email: "new@example.com" }, { $set: { name: "New" } });
+
+      expect(mockAutoRollbackCollection.bulkWrite.mock.calls[0][0][0].insertOne.bulkWriteOperation).toEqual({
+        deleteOne: { filter: { _id: "new-doc" } }
+      });
+    });
+
     it("should store rollback entries when updateMany is called", async () => {
       const result = await database.connect();
       result.db.autoRollbackEnabled = true;
@@ -222,6 +364,24 @@ describe("database - autoRollback feature", () => {
           filter: { _id: "doc2" },
           update: { "$unset": { "active": "" }}
         }
+      });
+    });
+
+    it("should record a delete rollback when updateMany upserts a document", async () => {
+      const result = await database.connect();
+      result.db.autoRollbackEnabled = true;
+      result.db.migrationFile = "test-migration.js";
+
+      updateManyResult = { upsertedId: "new-doc" };
+      const collection = result.db.collection("users");
+      collection.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([])
+      });
+
+      await collection.updateMany({ email: "new@example.com" }, { $set: { name: "New" } });
+
+      expect(mockAutoRollbackCollection.bulkWrite.mock.calls[0][0][0].insertOne.bulkWriteOperation).toEqual({
+        deleteOne: { filter: { _id: "new-doc" } }
       });
     });
 
