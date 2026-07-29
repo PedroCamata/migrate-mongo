@@ -1,6 +1,6 @@
 {
   "name": "@pedrocamata/migrate-mongo",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Migrate-mongo with extra features. Forked from https://github.com/seppevs/migrate-mongo",
   "type": "module",
   "main": "lib/migrate-mongo.js",
